@@ -160,7 +160,7 @@
   /* ログイン */
   .login-wrap { padding-top: calc(env(safe-area-inset-top, 0px) + 28px); }
   #v-login { padding-bottom: 0; }
-  body:has(#v-login:not(.hidden)) { padding-bottom: calc(24px + var(--safe-b)); }
+  body:has(#v-login:not(.hidden)), body:has(#v-change:not(.hidden)) { padding-bottom: calc(24px + var(--safe-b)); }
   .login-wrap h1 { font-size: 22px; margin: 0 0 4px; }
   .login-wrap p { color: var(--sub); margin: 0 0 18px; font-size: 14px; }
   .store-group { margin-bottom: 14px; }
@@ -171,13 +171,22 @@
   .dots { display: flex; justify-content: center; gap: 14px; margin: 18px 0 10px; }
   .dots span { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--main); }
   .dots span.on { background: var(--main); }
+  .pin-msg.note { color: var(--sub); }
   .pin-msg { min-height: 44px; text-align: center; color: var(--red); font-size: 14px; padding: 0 8px; }
-  #login-pin { display: flex; flex-direction: column; min-height: calc(100vh - 40px - env(safe-area-inset-top, 0px)); }
+  #login-pin, #change-wrap { display: flex; flex-direction: column; min-height: calc(100vh - 40px - env(safe-area-inset-top, 0px)); }
   .pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 100%; max-width: 340px; margin: auto auto 0; }
   .pad button { height: 64px; border-radius: 16px; border: 1px solid var(--line); background: var(--card); font-size: 26px; font-weight: 600; }
   .pad button:active { background: var(--main-soft); }
   .pad .blank { visibility: hidden; }
   .pad .del { font-size: 16px; }
+
+  /* メニュー */
+  .sheet-bg { position: fixed; inset: 0; background: rgba(36,48,46,.35); z-index: 80; display: flex; align-items: flex-end; }
+  .sheet { width: 100%; max-width: 560px; margin: 0 auto; background: var(--bg); border-radius: 18px 18px 0 0;
+    padding: 16px 16px calc(16px + var(--safe-b)); display: flex; flex-direction: column; gap: 8px; }
+  .sheet-title { text-align: center; color: var(--sub); font-size: 14px; margin-bottom: 4px; }
+  .sheet button { height: 54px; border-radius: 14px; border: 1px solid var(--line); background: var(--card); font-size: 17px; font-weight: 600; }
+  .sheet button.close { background: transparent; border: none; color: var(--sub); }
 
   /* お知らせ */
   .toast {
@@ -210,6 +219,18 @@
       <div class="pin-msg" id="pin-msg"></div>
       <div class="pad" id="pad"></div>
     </div>
+  </div>
+</section>
+
+<!-- 暗証番号を決める・変える -->
+<section id="v-change" class="view hidden">
+  <div class="login-wrap" id="change-wrap">
+    <div><button class="icon-btn" id="change-back"></button></div>
+    <div class="pin-name" id="change-title"></div>
+    <p style="text-align:center;margin:0" id="change-prompt"></p>
+    <div class="dots" id="c-dots"></div>
+    <div class="pin-msg" id="c-msg"></div>
+    <div class="pad" id="c-pad"></div>
   </div>
 </section>
 
@@ -298,6 +319,15 @@
   <div class="bottom"><div class="inner"><button class="btn" id="a-save">追加する</button></div></div>
 </section>
 
+<div class="sheet-bg hidden" id="sheet">
+  <div class="sheet">
+    <div class="sheet-title" id="sheet-title"></div>
+    <button id="sheet-pin">暗証番号を変更する</button>
+    <button id="sheet-logout">ログアウト</button>
+    <button id="sheet-close" class="close">閉じる</button>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 <div class="loading hidden" id="loading"><div class="spinner"></div></div>
 
@@ -354,6 +384,7 @@
       json = await res.json();
     }
     if (json.auth === false) { logout(true); throw new Error(json.error); }
+    if (json.mustChange && action !== 'login') { openChange(true); throw new Error(json.error); }
     if (!json.ok) { const err = new Error(json.error || '問題が起きました。'); err.data = json; throw err; }
     return json;
   }
@@ -372,7 +403,7 @@
 
   // ---------- 画面の切り替え（スマホの「戻る」にも対応） ----------
   function show(view, push) {
-    ['login', 'list', 'edit', 'add'].forEach(v => $('v-' + v).classList.toggle('hidden', v !== view));
+    ['login', 'change', 'list', 'edit', 'add'].forEach(v => $('v-' + v).classList.toggle('hidden', v !== view));
     window.scrollTo(0, 0);
     if (push) history.pushState({ view: view }, '');
   }
@@ -385,6 +416,7 @@
       history.pushState({ view: 'add' }, '');
       return;
     }
+    if (state.change && state.change.forced) return;
     if (state.auth) show('list'); else show('login');
   });
   document.querySelectorAll('[data-back]').forEach(b => b.addEventListener('click', () => history.back()));
@@ -439,16 +471,17 @@
   function drawDots() {
     $('dots').innerHTML = Array.from({ length: 6 }, (_, i) => '<span class="' + (i < pin.length ? 'on' : '') + '"></span>').join('');
   }
-  (function buildPad() {
+  function buildPad(container, onDigit, onDel) {
     const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'del'];
     keys.forEach(k => {
       const b = document.createElement('button');
       if (k === '') { b.className = 'blank'; b.disabled = true; }
-      else if (k === 'del') { b.className = 'del'; b.textContent = '1字消す'; b.onclick = () => { pin = pin.slice(0, -1); drawDots(); }; }
-      else { b.textContent = k; b.onclick = () => pressDigit(k); }
-      $('pad').appendChild(b);
+      else if (k === 'del') { b.className = 'del'; b.textContent = '1字消す'; b.onclick = onDel; }
+      else { b.textContent = k; b.onclick = () => onDigit(k); }
+      $(container).appendChild(b);
     });
-  })();
+  }
+  buildPad('pad', k => pressDigit(k), () => { pin = pin.slice(0, -1); drawDots(); });
   async function pressDigit(k) {
     if (pin.length >= 6) return;
     pin += k;
@@ -458,7 +491,8 @@
     try {
       const res = await api('login', { name: pinName, pin: pin });
       saveAuth({ token: res.token, name: res.name, exp: res.exp });
-      await enterApp();
+      if (res.mustChange) openChange(true);
+      else await enterApp();
     } catch (e) {
       $('pin-msg').textContent = e.message;
       pin = '';
@@ -475,7 +509,94 @@
     startLogin();
   }
   $('btn-me').onclick = () => {
-    if (confirm(state.auth.name + ' さんでログイン中です。\nログアウトしますか？')) logout(false);
+    $('sheet-title').textContent = state.auth.name + ' さんでログイン中';
+    $('sheet').classList.remove('hidden');
+  };
+  $('sheet-close').onclick = () => $('sheet').classList.add('hidden');
+  $('sheet').onclick = e => { if (e.target === $('sheet')) $('sheet').classList.add('hidden'); };
+  $('sheet-logout').onclick = () => {
+    $('sheet').classList.add('hidden');
+    if (confirm('ログアウトしますか？')) logout(false);
+  };
+  $('sheet-pin').onclick = () => {
+    $('sheet').classList.add('hidden');
+    openChange(false);
+  };
+
+  // ---------- 暗証番号を決める・変える ----------
+  // forced = true：仮の番号でログインした直後（自分の番号に変えるまで先に進めない）
+  const CHANGE_PROMPTS = {
+    current: '今の暗証番号を入力してください',
+    next: '新しい暗証番号（数字6桁）を決めてください',
+    confirm: '確認のため、もう一度入力してください',
+  };
+  function openChange(forced) {
+    state.change = { forced: forced, steps: forced ? ['next', 'confirm'] : ['current', 'next', 'confirm'], i: 0, current: '', next: '', buf: '' };
+    $('change-title').textContent = forced ? 'はじめに、自分の暗証番号を決めてください' : '暗証番号の変更';
+    $('change-back').textContent = forced ? 'ログアウト' : '‹ 戻る';
+    cMsg(forced ? '大泉さんから伝えられた仮の番号とは別の、自分だけの番号にしてください' : '', true);
+    drawChange();
+    show('change', !forced);
+  }
+  function cMsg(text, isNote) {
+    $('c-msg').textContent = text;
+    $('c-msg').classList.toggle('note', !!isNote);
+  }
+  function drawChange() {
+    const c = state.change;
+    $('change-prompt').textContent = CHANGE_PROMPTS[c.steps[c.i]];
+    $('c-dots').innerHTML = Array.from({ length: 6 }, (_, i) => '<span class="' + (i < c.buf.length ? 'on' : '') + '"></span>').join('');
+  }
+  function weakPin(p) {
+    if (/^(\d)\1{5}$/.test(p)) return '同じ数字が6つ並ぶ番号は使えません';
+    if ('0123456789'.indexOf(p) !== -1 || '9876543210'.indexOf(p) !== -1) return '「123456」のような連続した番号は使えません';
+    return '';
+  }
+  function restartChange(msg) {
+    const c = state.change;
+    c.i = 0; c.buf = ''; c.current = ''; c.next = '';
+    cMsg(msg);
+    drawChange();
+  }
+  buildPad('c-pad', async k => {
+    const c = state.change;
+    if (c.buf.length >= 6) return;
+    c.buf += k;
+    drawChange();
+    if (c.buf.length < 6) return;
+    const step = c.steps[c.i];
+    const value = c.buf;
+    c.buf = '';
+    if (step === 'current') { c.current = value; c.i++; cMsg(''); drawChange(); return; }
+    if (step === 'next') {
+      const weak = weakPin(value);
+      if (weak) { cMsg(weak); drawChange(); return; }
+      c.next = value; c.i++; cMsg(''); drawChange(); return;
+    }
+    if (value !== c.next) {
+      c.i = c.steps.indexOf('next');
+      cMsg('1回目と違いました。新しい番号をもう一度決めてください');
+      drawChange();
+      return;
+    }
+    loading(true);
+    try {
+      const res = await api('changePin', { currentPin: c.current, newPin: c.next });
+      saveAuth({ token: res.token, name: res.name, exp: res.exp });
+      const forced = c.forced;
+      state.change = null;
+      toast('暗証番号を変更しました');
+      if (forced) await enterApp();
+      else history.back();
+    } catch (e) {
+      if (state.change) restartChange(e.message);
+    } finally {
+      loading(false);
+    }
+  }, () => { state.change.buf = state.change.buf.slice(0, -1); drawChange(); });
+  $('change-back').onclick = () => {
+    if (state.change && state.change.forced) { state.change = null; logout(false); }
+    else { state.change = null; history.back(); }
   };
 
   // ---------- リスト ----------
