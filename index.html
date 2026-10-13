@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>来店理由記録</title>
+<meta name="theme-color" content="#2f5d58">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="来店記録">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="robots" content="noindex, nofollow">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
+<script src="config.js"></script>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f6f4f0;
+    --card: #ffffff;
+    --ink: #24302e;
+    --sub: #6b7573;
+    --line: #e4e0d8;
+    --main: #2f5d58;
+    --main-soft: #e3eeec;
+    --red: #c5372c;
+    --red-soft: #fbe6e3;
+    --amber: #a55c00;
+    --amber-soft: #fdefd9;
+    --sun: #c5372c;
+    --sat: #2c64b3;
+    --radius: 14px;
+    --safe-b: env(safe-area-inset-bottom, 0px);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    font-size: 16px; line-height: 1.5;
+    min-height: 100vh; padding-bottom: calc(96px + var(--safe-b));
+  }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  .hidden { display: none !important; }
+  .view { max-width: 560px; margin: 0 auto; padding: 0 16px; }
+
+  /* ヘッダー */
+  .top {
+    position: sticky; top: 0; z-index: 10; background: var(--bg);
+    padding: calc(env(safe-area-inset-top, 0px) + 10px) 0 8px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .top h1 { font-size: 18px; margin: 0; flex: 1; }
+  .icon-btn {
+    min-width: 44px; height: 44px; border: none; background: transparent; border-radius: 12px;
+    font-size: 15px; color: var(--main); padding: 0 8px;
+  }
+  .icon-btn:active { background: var(--main-soft); }
+  .me { font-size: 13px; color: var(--sub); border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 0 12px; height: 34px; }
+
+  /* カレンダー */
+  .cal { background: var(--card); border-radius: var(--radius); padding: 8px 8px 10px; border: 1px solid var(--line); }
+  .cal-head { display: flex; align-items: center; justify-content: space-between; padding: 0 2px 4px; }
+  .cal-head strong { font-size: 16px; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; }
+  .cal-grid .wd { font-size: 11px; color: var(--sub); padding: 2px 0; }
+  .cal-grid .wd.sun, .day.sun { color: var(--sun); }
+  .cal-grid .wd.sat, .day.sat { color: var(--sat); }
+  .day {
+    position: relative; height: 38px; border: none; background: transparent; border-radius: 10px;
+    font-size: 15px; font-variant-numeric: tabular-nums;
+  }
+  .day.today { font-weight: 700; box-shadow: inset 0 0 0 1.5px var(--main); }
+  .day.sel { background: var(--main); color: #fff !important; }
+  .day .dot {
+    position: absolute; left: 50%; bottom: 4px; width: 6px; height: 6px; margin-left: -3px;
+    border-radius: 50%; background: var(--red);
+  }
+  .day.sel .dot { background: #fff; }
+  .cal-note { font-size: 12px; color: var(--sub); margin: 6px 4px 0; display: flex; align-items: center; gap: 6px; }
+  .cal-note i { width: 6px; height: 6px; border-radius: 50%; background: var(--red); display: inline-block; }
+
+  /* 店舗の切り替え */
+  .tabs { display: flex; gap: 6px; margin: 12px 0 8px; }
+  .tab {
+    flex: 1; height: 44px; border-radius: 12px; border: 1px solid var(--line); background: var(--card);
+    font-size: 15px; position: relative;
+  }
+  .tab.on { background: var(--main); border-color: var(--main); color: #fff; font-weight: 600; }
+  .tab .cnt {
+    position: absolute; top: -6px; right: -4px; min-width: 20px; height: 20px; padding: 0 5px;
+    border-radius: 10px; background: var(--red); color: #fff; font-size: 12px; line-height: 20px;
+  }
+  .day-title { font-size: 15px; color: var(--sub); margin: 10px 4px 6px; }
+
+  /* お客様リスト */
+  .list { display: flex; flex-direction: column; gap: 8px; }
+  .item {
+    display: flex; gap: 12px; width: 100%; text-align: left; background: var(--card);
+    border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 12px; min-height: 72px;
+  }
+  .item:active { background: #faf9f6; }
+  .item .time { font-size: 17px; font-weight: 700; min-width: 50px; font-variant-numeric: tabular-nums; padding-top: 1px; }
+  .item .body { flex: 1; min-width: 0; }
+  .item .name { font-size: 17px; font-weight: 600; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .item .meta { font-size: 13px; color: var(--sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item .type { font-size: 12px; color: var(--sub); }
+  .item.cancel { opacity: .45; }
+  .badge { display: inline-block; font-size: 12px; font-weight: 700; border-radius: 6px; padding: 1px 7px; line-height: 1.6; }
+  .badge.need { background: var(--red-soft); color: var(--red); }
+  .badge.check { background: var(--amber-soft); color: var(--amber); }
+  .badge.cxl { background: #ececec; color: #555; }
+  .empty { text-align: center; color: var(--sub); padding: 32px 0; }
+
+  /* 下の固定ボタン */
+  .bottom {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+    padding: 10px 16px calc(10px + var(--safe-b)); background: linear-gradient(to top, var(--bg) 70%, rgba(246,244,240,0));
+  }
+  .bottom .inner { max-width: 560px; margin: 0 auto; display: flex; gap: 8px; }
+  .btn {
+    flex: 1; height: 54px; border-radius: 14px; border: none; font-size: 17px; font-weight: 700;
+    background: var(--main); color: #fff;
+  }
+  .btn.sub { background: var(--card); color: var(--main); border: 1px solid var(--line); font-weight: 600; }
+  .btn:disabled { opacity: .5; }
+
+  /* 編集・追加 */
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; margin-bottom: 12px; }
+  .info { display: grid; grid-template-columns: 84px 1fr; gap: 6px 10px; font-size: 15px; }
+  .info dt { color: var(--sub); font-size: 13px; padding-top: 2px; }
+  .info dd { margin: 0; word-break: break-word; }
+  .cust-name { font-size: 20px; font-weight: 700; margin: 0; }
+  .cust-kana { font-size: 13px; color: var(--sub); margin: 0 0 10px; }
+  .field { margin-bottom: 18px; }
+  .field > label, .field > .label { display: block; font-size: 14px; font-weight: 700; margin-bottom: 8px; }
+  .field .hint { font-weight: 400; color: var(--sub); font-size: 12px; margin-left: 4px; }
+  .req { color: var(--red); font-size: 12px; margin-left: 4px; }
+  .seg { display: flex; gap: 6px; flex-wrap: wrap; }
+  .seg button {
+    flex: 1 1 0; min-width: 80px; height: 48px; border-radius: 12px; border: 1px solid var(--line);
+    background: var(--card); font-size: 16px;
+  }
+  .chips { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .chips button { height: 48px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); font-size: 16px; }
+  .seg button.on, .chips button.on { background: var(--main); border-color: var(--main); color: #fff; font-weight: 700; }
+  .seg.danger button.on.cxl { background: #6b6b6b; border-color: #6b6b6b; }
+  input[type=text], input[type=date], input[type=time], select, textarea {
+    width: 100%; min-height: 48px; border: 1px solid var(--line); border-radius: 12px; background: var(--card);
+    padding: 10px 12px; font-size: 16px; -webkit-appearance: none; appearance: none;
+  }
+  select { background-image: linear-gradient(45deg, transparent 50%, var(--sub) 50%), linear-gradient(135deg, var(--sub) 50%, transparent 50%);
+    background-position: calc(100% - 18px) 21px, calc(100% - 13px) 21px; background-size: 5px 5px; background-repeat: no-repeat; padding-right: 32px; }
+  textarea { min-height: 110px; resize: vertical; }
+  .row2 { display: flex; gap: 8px; }
+  .row2 > * { flex: 1; }
+  .last-edit { font-size: 12px; color: var(--sub); text-align: right; margin-top: -4px; margin-bottom: 12px; }
+
+  /* ログイン */
+  .login-wrap { padding-top: calc(env(safe-area-inset-top, 0px) + 28px); }
+  #v-login { padding-bottom: 0; }
+  body:has(#v-login:not(.hidden)) { padding-bottom: calc(24px + var(--safe-b)); }
+  .login-wrap h1 { font-size: 22px; margin: 0 0 4px; }
+  .login-wrap p { color: var(--sub); margin: 0 0 18px; font-size: 14px; }
+  .store-group { margin-bottom: 14px; }
+  .store-group h2 { font-size: 13px; color: var(--sub); margin: 0 0 6px 4px; font-weight: 600; }
+  .names { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .names button { height: 56px; border-radius: 14px; border: 1px solid var(--line); background: var(--card); font-size: 17px; font-weight: 600; }
+  .pin-name { font-size: 20px; font-weight: 700; text-align: center; margin: 8px 0 4px; }
+  .dots { display: flex; justify-content: center; gap: 14px; margin: 18px 0 10px; }
+  .dots span { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--main); }
+  .dots span.on { background: var(--main); }
+  .pin-msg { min-height: 44px; text-align: center; color: var(--red); font-size: 14px; padding: 0 8px; }
+  #login-pin { display: flex; flex-direction: column; min-height: calc(100vh - 40px - env(safe-area-inset-top, 0px)); }
+  .pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 100%; max-width: 340px; margin: auto auto 0; }
+  .pad button { height: 64px; border-radius: 16px; border: 1px solid var(--line); background: var(--card); font-size: 26px; font-weight: 600; }
+  .pad button:active { background: var(--main-soft); }
+  .pad .blank { visibility: hidden; }
+  .pad .del { font-size: 16px; }
+
+  /* お知らせ */
+  .toast {
+    position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 14px); transform: translate(-50%, -20px);
+    background: #24302e; color: #fff; padding: 12px 20px; border-radius: 999px; font-size: 15px; font-weight: 600;
+    opacity: 0; transition: .25s; z-index: 100; pointer-events: none; white-space: nowrap;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .toast.err { background: var(--red); white-space: normal; width: max-content; max-width: calc(100vw - 32px); text-align: center; border-radius: 16px; }
+  .loading { position: fixed; inset: 0; background: rgba(246,244,240,.6); z-index: 90; display: flex; align-items: center; justify-content: center; }
+  .spinner { width: 34px; height: 34px; border: 3px solid var(--main-soft); border-top-color: var(--main); border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<!-- ログイン -->
+<section id="v-login" class="view hidden">
+  <div class="login-wrap">
+    <div id="login-names">
+      <h1>来店理由記録</h1>
+      <p>自分の名前を選んでください</p>
+      <div id="name-groups"></div>
+    </div>
+    <div id="login-pin" class="hidden">
+      <div><button class="icon-btn" id="pin-back">‹ 名前を選び直す</button></div>
+      <div class="pin-name" id="pin-name"></div>
+      <p style="text-align:center;margin:0">暗証番号（6桁）を入力してください</p>
+      <div class="dots" id="dots"></div>
+      <div class="pin-msg" id="pin-msg"></div>
+      <div class="pad" id="pad"></div>
+    </div>
+  </div>
+</section>
+
+<!-- お客様リスト -->
+<section id="v-list" class="view hidden">
+  <div class="top">
+    <h1>来店理由記録</h1>
+    <button class="icon-btn" id="btn-today">今日</button>
+    <button class="icon-btn" id="btn-reload" aria-label="読み込み直す">↻</button>
+    <button class="me" id="btn-me"></button>
+  </div>
+  <div class="cal">
+    <div class="cal-head">
+      <button class="icon-btn" id="cal-prev" aria-label="前の月">‹</button>
+      <strong id="cal-title"></strong>
+      <button class="icon-btn" id="cal-next" aria-label="次の月">›</button>
+    </div>
+    <div class="cal-grid" id="cal-grid"></div>
+    <div class="cal-note"><i></i>未入力・要確認が残っている日</div>
+  </div>
+  <div class="tabs" id="tabs"></div>
+  <div class="day-title" id="day-title"></div>
+  <div class="list" id="list"></div>
+  <div class="bottom"><div class="inner"><button class="btn" id="btn-add">＋ 予約を追加（電話・LINEなど）</button></div></div>
+</section>
+
+<!-- 編集 -->
+<section id="v-edit" class="view hidden">
+  <div class="top">
+    <button class="icon-btn" data-back>‹ 戻る</button>
+    <h1></h1>
+  </div>
+  <div class="card">
+    <p class="cust-name" id="e-name"></p>
+    <p class="cust-kana" id="e-kana"></p>
+    <dl class="info" id="e-info"></dl>
+  </div>
+  <div class="last-edit" id="e-last"></div>
+  <div class="field">
+    <label for="e-staff">担当者</label>
+    <select id="e-staff"></select>
+  </div>
+  <div class="field">
+    <div class="label">来店区分</div>
+    <div class="seg" id="e-type"></div>
+  </div>
+  <div id="e-reason-box">
+    <div class="field">
+      <div class="label">来店理由１</div>
+      <div class="chips" id="e-reason"></div>
+    </div>
+    <div class="field">
+      <label for="e-detail">詳しい来店理由</label>
+      <textarea id="e-detail" placeholder="例：AIで「登戸 縮毛矯正」と調べて、ホットペッパーで見比べて口コミが良かった"></textarea>
+    </div>
+  </div>
+  <div class="field">
+    <div class="label">状態</div>
+    <div class="seg danger" id="e-status"></div>
+  </div>
+  <div class="bottom"><div class="inner"><button class="btn" id="e-save">保存する</button></div></div>
+</section>
+
+<!-- 予約の追加 -->
+<section id="v-add" class="view hidden">
+  <div class="top">
+    <button class="icon-btn" data-back>‹ 戻る</button>
+    <h1>予約を追加</h1>
+  </div>
+  <div class="field"><div class="label">店舗<span class="req">必須</span></div><div class="seg" id="a-store"></div></div>
+  <div class="field">
+    <div class="label">来店日時<span class="req">必須</span></div>
+    <div class="row2"><input type="date" id="a-date"><input type="time" id="a-time" step="300"></div>
+  </div>
+  <div class="field"><label for="a-name">氏名<span class="req">必須</span></label><input type="text" id="a-name" autocomplete="off" placeholder="山田 花子"></div>
+  <div class="field"><label for="a-kana">フリガナ<span class="hint">再来の判定に使います</span></label><input type="text" id="a-kana" autocomplete="off" placeholder="ヤマダ ハナコ"></div>
+  <div class="field"><label for="a-staff">担当者</label><select id="a-staff"></select></div>
+  <div class="field"><div class="label">指名<span class="req">必須</span></div><div class="seg" id="a-nom"></div></div>
+  <div class="field"><label for="a-menu">メニュー</label><input type="text" id="a-menu" autocomplete="off" placeholder="カット＋カラー"></div>
+  <div class="field"><div class="label">予約経路<span class="req">必須</span></div><div class="chips" id="a-route"></div></div>
+  <div class="field"><div class="label">来店区分<span class="req">必須</span></div><div class="seg" id="a-type"></div></div>
+  <div id="a-reason-box">
+    <div class="field"><div class="label">来店理由１</div><div class="chips" id="a-reason"></div></div>
+    <div class="field"><label for="a-detail">詳しい来店理由</label><textarea id="a-detail" placeholder="例：友達の紹介。インスタも見てから予約した"></textarea></div>
+  </div>
+  <div class="bottom"><div class="inner"><button class="btn" id="a-save">追加する</button></div></div>
+</section>
+
+<div class="toast" id="toast"></div>
+<div class="loading hidden" id="loading"><div class="spinner"></div></div>
+
+<script>
+(() => {
+  'use strict';
+  const AUTH_KEY = 'raiten_auth';
+  const STORE_KEY = 'raiten_store';
+  const $ = id => document.getElementById(id);
+  const WD = ['日', '月', '火', '水', '木', '金', '土'];
+
+  const state = {
+    auth: null,        // { token, name, exp }
+    boot: null,        // スタッフ・選択肢など
+    date: '',          // 表示している日（yyyy-mm-dd）
+    month: '',         // カレンダーの月（yyyy-mm）
+    store: '',
+    rows: [],
+    marks: {},
+    loadedAt: 0,
+    current: null,     // 編集中のお客様
+    edit: null,        // 編集中の値
+    add: null,         // 追加中の値
+  };
+
+  // ---------- 共通 ----------
+  const pad2 = n => String(n).padStart(2, '0');
+  const ymd = d => d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  const parseYmd = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  function toast(msg, isErr) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.className = 'toast show' + (isErr ? ' err' : '');
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(() => { t.className = 'toast' + (isErr ? ' err' : ''); }, isErr ? 4000 : 1800);
+  }
+  function loading(on) { $('loading').classList.toggle('hidden', !on); }
+
+  async function api(action, data) {
+    const body = Object.assign({ action: action, token: state.auth ? state.auth.token : '' }, data || {});
+    let json;
+    if (window.MOCK_API) {
+      json = await window.MOCK_API(body);
+    } else {
+      if (!window.API_URL) throw new Error('config.js にAPIのURLが入っていません。');
+      let res;
+      try {
+        res = await fetch(window.API_URL, { method: 'POST', body: JSON.stringify(body) });
+      } catch (e) {
+        throw new Error('通信できませんでした。電波の良い場所でもう一度試してください。');
+      }
+      json = await res.json();
+    }
+    if (json.auth === false) { logout(true); throw new Error(json.error); }
+    if (!json.ok) { const err = new Error(json.error || '問題が起きました。'); err.data = json; throw err; }
+    return json;
+  }
+
+  function saveAuth(a) {
+    state.auth = a;
+    try { a ? localStorage.setItem(AUTH_KEY, JSON.stringify(a)) : localStorage.removeItem(AUTH_KEY); } catch (e) {}
+  }
+  function loadAuth() {
+    try {
+      const a = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null');
+      if (a && a.token && a.exp > Date.now()) return a;
+    } catch (e) {}
+    return null;
+  }
+
+  // ---------- 画面の切り替え（スマホの「戻る」にも対応） ----------
+  function show(view, push) {
+    ['login', 'list', 'edit', 'add'].forEach(v => $('v-' + v).classList.toggle('hidden', v !== view));
+    window.scrollTo(0, 0);
+    if (push) history.pushState({ view: view }, '');
+  }
+  window.addEventListener('popstate', () => {
+    if (!$('v-edit').classList.contains('hidden') && isEditDirty() && !confirm('保存せずに戻りますか？')) {
+      history.pushState({ view: 'edit' }, '');
+      return;
+    }
+    if (!$('v-add').classList.contains('hidden') && isAddDirty() && !confirm('入力した内容を消して戻りますか？')) {
+      history.pushState({ view: 'add' }, '');
+      return;
+    }
+    if (state.auth) show('list'); else show('login');
+  });
+  document.querySelectorAll('[data-back]').forEach(b => b.addEventListener('click', () => history.back()));
+
+  // ---------- ログイン ----------
+  let pinName = '';
+  let pin = '';
+
+  async function startLogin() {
+    show('login');
+    $('login-names').classList.remove('hidden');
+    $('login-pin').classList.add('hidden');
+    loading(true);
+    try {
+      const res = await api('staff');
+      const groups = $('name-groups');
+      groups.innerHTML = '';
+      res.stores.forEach(store => {
+        const people = res.staff.filter(s => s.stores.indexOf(store) !== -1);
+        if (!people.length) return;
+        const g = document.createElement('div');
+        g.className = 'store-group';
+        g.innerHTML = '<h2>' + esc(store) + '</h2><div class="names"></div>';
+        people.forEach(p => {
+          const b = document.createElement('button');
+          b.textContent = p.name;
+          b.onclick = () => openPin(p.name);
+          g.querySelector('.names').appendChild(b);
+        });
+        groups.appendChild(g);
+      });
+    } catch (e) {
+      toast(e.message, true);
+    } finally {
+      loading(false);
+    }
+  }
+
+  function openPin(name) {
+    pinName = name;
+    pin = '';
+    $('pin-name').textContent = name + ' さん';
+    $('pin-msg').textContent = '';
+    $('login-names').classList.add('hidden');
+    $('login-pin').classList.remove('hidden');
+    drawDots();
+  }
+  $('pin-back').onclick = () => {
+    $('login-pin').classList.add('hidden');
+    $('login-names').classList.remove('hidden');
+  };
+  function drawDots() {
+    $('dots').innerHTML = Array.from({ length: 6 }, (_, i) => '<span class="' + (i < pin.length ? 'on' : '') + '"></span>').join('');
+  }
+  (function buildPad() {
+    const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'del'];
+    keys.forEach(k => {
+      const b = document.createElement('button');
+      if (k === '') { b.className = 'blank'; b.disabled = true; }
+      else if (k === 'del') { b.className = 'del'; b.textContent = '1字消す'; b.onclick = () => { pin = pin.slice(0, -1); drawDots(); }; }
+      else { b.textContent = k; b.onclick = () => pressDigit(k); }
+      $('pad').appendChild(b);
+    });
+  })();
+  async function pressDigit(k) {
+    if (pin.length >= 6) return;
+    pin += k;
+    drawDots();
+    if (pin.length < 6) return;
+    loading(true);
+    try {
+      const res = await api('login', { name: pinName, pin: pin });
+      saveAuth({ token: res.token, name: res.name, exp: res.exp });
+      await enterApp();
+    } catch (e) {
+      $('pin-msg').textContent = e.message;
+      pin = '';
+      drawDots();
+    } finally {
+      loading(false);
+    }
+  }
+
+  function logout(expired) {
+    saveAuth(null);
+    state.boot = null;
+    if (expired) toast('もう一度ログインしてください', true);
+    startLogin();
+  }
+  $('btn-me').onclick = () => {
+    if (confirm(state.auth.name + ' さんでログイン中です。\nログアウトしますか？')) logout(false);
+  };
+
+  // ---------- リスト ----------
+  async function enterApp() {
+    loading(true);
+    try {
+      state.boot = await api('boot');
+      $('btn-me').textContent = state.boot.name;
+      let saved = '';
+      try { saved = localStorage.getItem(STORE_KEY) || ''; } catch (e) {}
+      state.store = state.boot.stores.indexOf(saved) !== -1 ? saved : (state.boot.myStores[0] || state.boot.stores[0]);
+      const today = ymd(new Date());
+      state.date = today;
+      state.month = today.slice(0, 7);
+      history.replaceState({ view: 'list' }, '');
+      show('list');
+      await reload();
+    } finally {
+      loading(false);
+    }
+  }
+
+  async function reload() {
+    loading(true);
+    try {
+      const res = await api('load', { date: state.date, month: state.month });
+      state.rows = res.rows;
+      state.marks = res.marks;
+      state.loadedAt = Date.now();
+      drawList();
+    } catch (e) {
+      toast(e.message, true);
+    } finally {
+      loading(false);
+    }
+  }
+
+  function drawCalendar() {
+    const [y, m] = state.month.split('-').map(Number);
+    $('cal-title').textContent = y + '年' + m + '月';
+    const first = new Date(y, m - 1, 1);
+    const days = new Date(y, m, 0).getDate();
+    const today = ymd(new Date());
+    let html = WD.map((w, i) => '<div class="wd' + (i === 0 ? ' sun' : i === 6 ? ' sat' : '') + '">' + w + '</div>').join('');
+    for (let i = 0; i < first.getDay(); i++) html += '<div></div>';
+    for (let d = 1; d <= days; d++) {
+      const key = state.month + '-' + pad2(d);
+      const wd = (first.getDay() + d - 1) % 7;
+      const mark = state.marks[key] && state.marks[key][state.store];
+      const cls = ['day', wd === 0 ? 'sun' : wd === 6 ? 'sat' : '', key === today ? 'today' : '', key === state.date ? 'sel' : ''].join(' ');
+      html += '<button class="' + cls + '" data-date="' + key + '">' + d + (mark ? '<span class="dot"></span>' : '') + '</button>';
+    }
+    $('cal-grid').innerHTML = html;
+    $('cal-grid').querySelectorAll('.day').forEach(b => b.onclick = () => {
+      state.date = b.dataset.date;
+      reload();
+    });
+  }
+
+  function drawTabs() {
+    $('tabs').innerHTML = '';
+    state.boot.stores.forEach(store => {
+      const n = state.rows.filter(r => r.store === store && needs(r)).length;
+      const b = document.createElement('button');
+      b.className = 'tab' + (store === state.store ? ' on' : '');
+      b.innerHTML = esc(store) + (n ? '<span class="cnt">' + n + '</span>' : '');
+      b.onclick = () => {
+        state.store = store;
+        try { localStorage.setItem(STORE_KEY, store); } catch (e) {}
+        drawList();
+      };
+      $('tabs').appendChild(b);
+    });
+  }
+
+  const isCancel = r => r.status === 'キャンセル';
+  const needs = r => !isCancel(r) && (r.visitType === '要確認' || (r.visitType === '新規' && !r.reason));
+
+  function drawList() {
+    drawCalendar();
+    drawTabs();
+    const d = parseYmd(state.date);
+    const isToday = state.date === ymd(new Date());
+    $('day-title').textContent = (d.getMonth() + 1) + '月' + d.getDate() + '日（' + WD[d.getDay()] + '）' + (isToday ? '・今日' : '') + '　' + state.store;
+
+    const rows = state.rows.filter(r => r.store === state.store)
+      .sort((a, b) => (isCancel(a) - isCancel(b)) || a.time.localeCompare(b.time));
+    const list = $('list');
+    list.innerHTML = '';
+    if (!rows.length) {
+      list.innerHTML = '<div class="empty">この日の予約はありません</div>';
+      return;
+    }
+    rows.forEach(r => {
+      let badge = '';
+      if (isCancel(r)) badge = '<span class="badge cxl">キャンセル</span>';
+      else if (r.visitType === '要確認') badge = '<span class="badge check">要確認</span>';
+      else if (r.visitType === '新規' && !r.reason) badge = '<span class="badge need">未入力</span>';
+      const b = document.createElement('button');
+      b.className = 'item' + (isCancel(r) ? ' cancel' : '');
+      b.innerHTML =
+        '<div class="time">' + esc(r.time) + '</div>' +
+        '<div class="body">' +
+          '<div class="name">' + esc(r.name) + ' 様 ' + badge + '</div>' +
+          '<div class="meta">' + esc(r.staff || '担当未定') + '・' + esc(r.menu || 'メニュー未入力') + '</div>' +
+          '<div class="type">来店区分：' + esc(r.visitType || '—') + (r.reason ? '／' + esc(r.reason) : '') + '</div>' +
+        '</div>';
+      b.onclick = () => openEdit(r);
+      list.appendChild(b);
+    });
+  }
+
+  $('cal-prev').onclick = () => moveMonth(-1);
+  $('cal-next').onclick = () => moveMonth(1);
+  function moveMonth(diff) {
+    const [y, m] = state.month.split('-').map(Number);
+    const d = new Date(y, m - 1 + diff, 1);
+    state.month = d.getFullYear() + '-' + pad2(d.getMonth() + 1);
+    state.date = state.month === ymd(new Date()).slice(0, 7) ? ymd(new Date()) : state.month + '-01';
+    reload();
+  }
+  $('btn-today').onclick = () => {
+    state.date = ymd(new Date());
+    state.month = state.date.slice(0, 7);
+    reload();
+  };
+  $('btn-reload').onclick = () => reload();
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && state.boot && !$('v-list').classList.contains('hidden') && Date.now() - state.loadedAt > 60000) reload();
+  });
+
+  // ---------- 選択ボタンの部品 ----------
+  function buttons(container, options, value, onChange, opts) {
+    const el = $(container);
+    el.innerHTML = '';
+    options.forEach(opt => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = opt;
+      if (opt === value) b.classList.add('on');
+      if (opts && opts.cancelStyle && opt === 'キャンセル') b.classList.add('cxl');
+      b.onclick = () => {
+        const next = (opts && opts.toggle && opt === value) ? '' : opt;
+        onChange(next);
+        buttons(container, options, next, onChange, opts);
+      };
+      el.appendChild(b);
+    });
+  }
+  function staffSelect(id, store, value) {
+    const sel = $(id);
+    const mine = state.boot.staff.filter(s => s.stores.indexOf(store) !== -1).map(s => s.name);
+    const others = state.boot.staff.map(s => s.name).filter(n => mine.indexOf(n) === -1);
+    let html = '<option value="">（未選択）</option>';
+    html += '<optgroup label="' + esc(store) + '">' + mine.map(n => '<option>' + esc(n) + '</option>').join('') + '</optgroup>';
+    if (others.length) html += '<optgroup label="ほかの店舗">' + others.map(n => '<option>' + esc(n) + '</option>').join('') + '</optgroup>';
+    if (value && mine.indexOf(value) === -1 && others.indexOf(value) === -1) html += '<option>' + esc(value) + '</option>';
+    sel.innerHTML = html;
+    sel.value = value || '';
+  }
+
+  // ---------- 編集 ----------
+  function openEdit(r) {
+    state.current = r;
+    state.edit = { '担当者': r.staff, '来店区分': r.visitType, '来店理由１': r.reason, '詳しい来店理由': r.detail, '状態': r.status || '予約' };
+    $('v-edit').querySelector('h1').textContent = r.time + '　' + r.store;
+    $('e-name').textContent = r.name + ' 様';
+    $('e-kana').textContent = r.kana;
+    const info = [
+      ['来店日時', r.visit], ['店舗', r.store], ['指名', r.nominated], ['メニュー', r.menu], ['クーポン', r.coupon],
+      ['予約金額', r.amount === '' ? '' : Number(r.amount).toLocaleString() + '円'], ['予約経路', r.route], ['予約番号', r.no], ['メモ', r.memo],
+    ].filter(x => x[1] !== '' && x[1] != null);
+    $('e-info').innerHTML = info.map(x => '<dt>' + esc(x[0]) + '</dt><dd>' + esc(x[1]) + '</dd>').join('');
+    $('e-last').textContent = r.editor ? '最後の入力：' + r.editor + '（' + r.editedAt + '）' : '';
+
+    staffSelect('e-staff', r.store, r.staff);
+    $('e-staff').onchange = e => { state.edit['担当者'] = e.target.value; };
+    buttons('e-type', state.boot.choices.visitType, state.edit['来店区分'], v => { state.edit['来店区分'] = v || state.edit['来店区分']; toggleEditReason(); });
+    buttons('e-reason', state.boot.choices.reason, state.edit['来店理由１'], v => { state.edit['来店理由１'] = v; }, { toggle: true });
+    $('e-detail').value = r.detail;
+    $('e-detail').oninput = e => { state.edit['詳しい来店理由'] = e.target.value; };
+    buttons('e-status', state.boot.choices.status, state.edit['状態'], v => { state.edit['状態'] = v; }, { cancelStyle: true });
+    toggleEditReason();
+    show('edit', true);
+  }
+  function toggleEditReason() {
+    $('e-reason-box').classList.toggle('hidden', state.edit['来店区分'] === '再来');
+  }
+  function editChanges() {
+    const r = state.current;
+    const orig = { '担当者': r.staff, '来店区分': r.visitType, '来店理由１': r.reason, '詳しい来店理由': r.detail, '状態': r.status || '予約' };
+    const changes = {};
+    Object.keys(orig).forEach(k => {
+      if (String(state.edit[k] || '').trim() !== String(orig[k] || '').trim()) changes[k] = state.edit[k];
+    });
+    return changes;
+  }
+  function isEditDirty() { return state.current && Object.keys(editChanges()).length > 0; }
+
+  $('e-save').onclick = async () => {
+    const changes = editChanges();
+    if (!Object.keys(changes).length) { toast('変更はありません'); history.back(); return; }
+    loading(true);
+    try {
+      await api('save', { no: state.current.no, changes: changes });
+      state.current = null;
+      toast('保存しました');
+      history.back();
+      await reload();
+    } catch (e) {
+      toast(e.message, true);
+    } finally {
+      loading(false);
+    }
+  };
+
+  // ---------- 予約の追加 ----------
+  function openAdd() {
+    state.add = { store: state.store, date: state.date, time: '', name: '', kana: '', staff: '', nominated: 'なし', menu: '', route: '', visitType: '', reason: '', detail: '' };
+    const a = state.add;
+    buttons('a-store', state.boot.stores, a.store, v => { a.store = v || a.store; staffSelect('a-staff', a.store, a.staff); });
+    $('a-date').value = a.date;
+    $('a-time').value = '';
+    ['name', 'kana', 'menu'].forEach(k => { $('a-' + k).value = ''; });
+    $('a-detail').value = '';
+    staffSelect('a-staff', a.store, '');
+    buttons('a-nom', ['あり', 'なし'], a.nominated, v => { a.nominated = v || a.nominated; });
+    buttons('a-route', state.boot.choices.route, '', v => { a.route = v; }, { toggle: true });
+    buttons('a-type', state.boot.choices.visitType, '', v => { a.visitType = v; toggleAddReason(); }, { toggle: true });
+    buttons('a-reason', state.boot.choices.reason, '', v => { a.reason = v; }, { toggle: true });
+    toggleAddReason();
+    show('add', true);
+  }
+  function toggleAddReason() { $('a-reason-box').classList.toggle('hidden', state.add.visitType === '再来'); }
+  function readAddInputs() {
+    const a = state.add;
+    a.date = $('a-date').value;
+    a.time = $('a-time').value;
+    a.name = $('a-name').value.trim();
+    a.kana = $('a-kana').value.trim();
+    a.menu = $('a-menu').value.trim();
+    a.staff = $('a-staff').value;
+    a.detail = $('a-detail').value.trim();
+    return a;
+  }
+  function isAddDirty() { if (!state.add) return false; const a = readAddInputs(); return !!(a.name || a.kana || a.menu || a.time || a.route || a.visitType || a.detail); }
+  $('btn-add').onclick = openAdd;
+
+  $('a-save').onclick = async () => {
+    const a = readAddInputs();
+    const missing = [];
+    if (!a.date || !a.time) missing.push('来店日時');
+    if (!a.name) missing.push('氏名');
+    if (!a.route) missing.push('予約経路');
+    if (!a.visitType) missing.push('来店区分');
+    if (missing.length) { toast('入力してください：' + missing.join('、'), true); return; }
+    const fields = Object.assign({}, a);
+    if (fields.visitType === '再来') { fields.reason = ''; fields.detail = ''; }
+    loading(true);
+    try {
+      await api('add', { fields: fields });
+      state.add = null;
+      state.store = a.store;
+      state.date = a.date;
+      state.month = a.date.slice(0, 7);
+      toast('保存しました');
+      history.back();
+      await reload();
+    } catch (e) {
+      toast(e.message, true);
+    } finally {
+      loading(false);
+    }
+  };
+
+  // ---------- 起動 ----------
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+  state.auth = loadAuth();
+  if (state.auth) {
+    enterApp().catch(e => { toast(e.message, true); if (!state.auth) startLogin(); });
+  } else {
+    startLogin();
+  }
+})();
+</script>
+</body>
+</html>
